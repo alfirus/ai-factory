@@ -4,11 +4,11 @@
       "command": "node",
       "args": ["/path/to/ai-factory/dist/index.js"],
       "env": {
-        "GEMINI_API_KEY": "your-gemini-key",
-        "ANTHROPIC_API_KEY": "your-anthropic-key",
-        "COPILOT_API_PORT": "4141",
-        "LOG_LEVEL": "info"
-      }
+							"GEMINI_API_KEY": "your-gemini-key",
+							"OPENAI_API_KEY": "your-openai-key",
+							"COPILOT_API_PORT": "4141",
+							"LOG_LEVEL": "info"
+						}
     }
   }
 }

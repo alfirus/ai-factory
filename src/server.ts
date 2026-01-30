@@ -7,6 +7,7 @@ import { registerAllProviders, getProvider, getAllProviders, ChatMessage } from 
 import { buildReviewPrompt } from "./tools/prompts.js";
 import { isBrainAvailable, loadPersona, loadCoreRules } from "./brain/loader.js";
 import { buildBrainSystemPrompt } from "./tools/brain-chat.js";
+import { usageTracker } from './utils/usage-tracker.js';
 
 // Conversation storage
 const conversations = new Map<string, Map<string, ChatMessage[]>>();
@@ -34,13 +35,13 @@ const server = new Server({
 
 // Register tools
 const aiChatSchema = z.object({
-  provider: z.string().describe("Provider name: gemini, claude, or copilot"),
-  prompt: z.string().describe("The user prompt to send to the provider"),
-  model: z.string().optional().describe("Optional model override"),
-  system_prompt: z.string().optional().describe("Optional system prompt"),
-  conversation_id: z.string().optional().describe("Conversation ID for multi-turn chat"),
-  temperature: z.number().optional().describe("Temperature for creativity (0-1)"),
-  max_tokens: z.number().optional().describe("Maximum tokens in response"),
+	provider: z.string().describe('Provider name: gemini, openai, or copilot'),
+	prompt: z.string().describe('The user prompt to send to the provider'),
+	model: z.string().optional().describe('Optional model override'),
+	system_prompt: z.string().optional().describe('Optional system prompt'),
+	conversation_id: z.string().optional().describe('Conversation ID for multi-turn chat'),
+	temperature: z.number().optional().describe('Temperature for creativity (0-1)'),
+	max_tokens: z.number().optional().describe('Maximum tokens in response'),
 });
 
 const aiCompareSchema = z.object({
@@ -61,14 +62,17 @@ const aiReviewSchema = z.object({
 });
 
 const aiBrainChatSchema = z.object({
-  provider: z.string().describe("Provider name: gemini, claude, or copilot"),
-  prompt: z.string().describe("The user prompt to send to the provider"),
-  model: z.string().optional().describe("Optional model override"),
-  persona: z.string().optional().describe("Persona name to load (defaults to 'default')"),
-  brain_modules: z.array(z.enum(["persona", "rules", "knowledge"])).optional().describe("Brain modules to include: persona, rules, knowledge"),
-  knowledge_query: z.string().optional().describe("Query for knowledge search"),
-  temperature: z.number().optional().describe("Temperature for creativity (0-1)"),
-  max_tokens: z.number().optional().describe("Maximum tokens in response"),
+	provider: z.string().describe('Provider name: gemini, openai, or copilot'),
+	prompt: z.string().describe('The user prompt to send to the provider'),
+	model: z.string().optional().describe('Optional model override'),
+	persona: z.string().optional().describe("Persona name to load (defaults to 'default')"),
+	brain_modules: z
+		.array(z.enum(['persona', 'rules', 'knowledge']))
+		.optional()
+		.describe('Brain modules to include: persona, rules, knowledge'),
+	knowledge_query: z.string().optional().describe('Query for knowledge search'),
+	temperature: z.number().optional().describe('Temperature for creativity (0-1)'),
+	max_tokens: z.number().optional().describe('Maximum tokens in response'),
 });
 
 const aiListSchema = z.object({});
@@ -166,12 +170,15 @@ server.setRequestHandler(async (request) => {
         }
 
         // Call provider
-        const response = await provider.chat(history, {
-          model: parsed.model,
-          systemPrompt,
-          temperature: parsed.temperature,
-          maxTokens: parsed.max_tokens,
-        });
+        const chatModel = parsed.model || provider.defaultModel;
+								const response = await usageTracker.track(parsed.provider, chatModel, 'ai_chat', () =>
+									provider.chat(history, {
+										model: parsed.model,
+										systemPrompt,
+										temperature: parsed.temperature,
+										maxTokens: parsed.max_tokens,
+									}),
+								);
 
         // Add assistant response to history
         history.push({
@@ -217,11 +224,13 @@ server.setRequestHandler(async (request) => {
 
         const results = await Promise.allSettled(
           targetProviders.map(async (provider) => {
-            const response = await provider.chat(parsed.prompt, {
-              systemPrompt: parsed.system_prompt,
-              temperature: parsed.temperature,
-              maxTokens: parsed.max_tokens,
-            });
+            const response = await usageTracker.track(provider.name, provider.defaultModel, 'ai_compare', () =>
+													provider.chat(parsed.prompt, {
+														systemPrompt: parsed.system_prompt,
+														temperature: parsed.temperature,
+														maxTokens: parsed.max_tokens,
+													}),
+												);
             return { provider: provider.name, response };
           })
         );
@@ -275,11 +284,13 @@ server.setRequestHandler(async (request) => {
         }
 
         const reviewPrompt = buildReviewPrompt(parsed.code, parsed.language, parsed.focus as any);
-        const response = await provider.chat(reviewPrompt, {
-          model: undefined,
-          temperature: parsed.temperature,
-          maxTokens: parsed.max_tokens,
-        });
+        const response = await usageTracker.track(parsed.provider, provider.defaultModel, 'ai_review', () =>
+									provider.chat(reviewPrompt, {
+										model: undefined,
+										temperature: parsed.temperature,
+										maxTokens: parsed.max_tokens,
+									}),
+								);
 
         return {
           content: [
@@ -343,12 +354,15 @@ server.setRequestHandler(async (request) => {
         });
 
         // Call provider with brain context
-        const response = await provider.chat(parsed.prompt, {
-          model: parsed.model,
-          systemPrompt: brainSystemPrompt,
-          temperature: parsed.temperature,
-          maxTokens: parsed.max_tokens,
-        });
+        const brainModel = parsed.model || provider.defaultModel;
+								const response = await usageTracker.track(parsed.provider, brainModel, 'ai_brain_chat', () =>
+									provider.chat(parsed.prompt, {
+										model: parsed.model,
+										systemPrompt: brainSystemPrompt,
+										temperature: parsed.temperature,
+										maxTokens: parsed.max_tokens,
+									}),
+								);
 
         return {
           content: [

@@ -10,13 +10,13 @@ Checklist derived from [plan.md](plan.md). Each task maps to a specific plan sec
 
 - [x] Run `npm init -y`
 - [x] Set `"type": "module"` in `package.json`
-- [x] Install runtime deps: `@modelcontextprotocol/sdk`, `zod`, `@google/genai`, `@anthropic-ai/sdk`, `openai`, `dotenv`
+- [x] Install runtime deps: `@modelcontextprotocol/sdk`, `zod`, `@google/genai`, `openai`, `dotenv`
 - [x] Install dev deps: `typescript`, `@types/node`, `tsup`, `tsx`
 - [x] Create `tsconfig.json` (ES2022, ESNext, bundler resolution, strict)
 - [x] Add scripts to `package.json`: `build`, `dev`, `start`
 - [x] Add `"bin"` entry pointing to `./dist/index.js`
 - [x] Create `.gitignore` (node_modules, dist, .env, *.tsbuildinfo)
-- [x] Create `.env.example` with all env vars (GEMINI_API_KEY, ANTHROPIC_API_KEY, COPILOT_API_PORT, COPILOT_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL, ANTHROPIC_DEFAULT_MODEL, LOG_LEVEL, REQUEST_TIMEOUT_MS)
+- [x] Create `.env.example` with all env vars (GEMINI_API_KEY, OPENAI_API_KEY, COPILOT_API_PORT, COPILOT_DEFAULT_MODEL, GEMINI_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, LOG_LEVEL, REQUEST_TIMEOUT_MS)
 - [x] Create `src/` directory structure matching plan §2
 - [x] Verify project builds with `npm run build` (empty entry point)
 
@@ -48,18 +48,18 @@ Checklist derived from [plan.md](plan.md). Each task maps to a specific plan sec
 - [x] Register in `src/providers/index.ts`
 - [x] Test: verify Gemini responds with a valid API key
 
-### 1.5 Claude Provider `[plan: §3.3]`
+### 1.5 OpenAI Provider `[plan: §3.3]`
 
-- [x] Implement `src/providers/claude.ts`:
-  - [x] Import `@anthropic-ai/sdk`
-  - [x] Read `ANTHROPIC_API_KEY` and `ANTHROPIC_DEFAULT_MODEL` from env
-  - [x] `isAvailable()` — check if `ANTHROPIC_API_KEY` is set
-  - [x] `chat()` — accept `string | ChatMessage[]`, call `anthropic.messages.create()`
-  - [x] Map `ChatMessage[]` to Anthropic message format
+- [x] Implement `src/providers/openai.ts`:
+  - [x] Import `openai` SDK
+  - [x] Read `OPENAI_API_KEY` and `OPENAI_DEFAULT_MODEL` from env
+  - [x] `isAvailable()` — check if `OPENAI_API_KEY` is set
+  - [x] `chat()` — accept `string | ChatMessage[]`, call `openai.chat.completions.create()`
+  - [x] Map `ChatMessage[]` to OpenAI message format
   - [x] Support `temperature` and `maxTokens` options
   - [x] Wrap API call with `withTimeout()`
 - [x] Register in `src/providers/index.ts`
-- [x] Test: verify Claude responds with a valid API key
+- [x] Test: verify OpenAI responds with a valid API key
 
 ### 1.6 MCP Server + `ai_chat` + `ai_list` Tools `[plan: §4.1, §4.4, §5.1, §5.2]`
 
@@ -129,7 +129,7 @@ Checklist derived from [plan.md](plan.md). Each task maps to a specific plan sec
 - [x] Create sample `opencode.json` with AI Factory config (local, stdio)
 - [ ] Test in OpenCode: `ai_list` returns provider status
 - [ ] Test in OpenCode: `ai_chat` with Gemini
-- [ ] Test in OpenCode: `ai_chat` with Claude
+- [ ] Test in OpenCode: `ai_chat` with OpenAI
 - [ ] Test in OpenCode: `ai_chat` with Copilot (if proxy running)
 - [ ] Test in OpenCode: `ai_compare` with 2+ providers
 - [ ] Test in OpenCode: `ai_review` on a real file
@@ -247,7 +247,7 @@ Checklist derived from [plan.md](plan.md). Each task maps to a specific plan sec
 ### Implementation Notes
 
 **Phase 1 Remaining (5/60):** These are integration tests with OpenCode that require:
-- Valid API keys for Gemini and Anthropic
+- Valid API keys for Gemini and OpenAI
 - OpenCode client to be installed
 - Actual execution of tools in OpenCode environment
 
@@ -257,7 +257,7 @@ Checklist derived from [plan.md](plan.md). Each task maps to a specific plan sec
 | --- | --- | --- |
 | Project Setup | ✅ Complete | npm, TypeScript, build scripts configured |
 | Utils | ✅ Complete | logger, config, errors, timeout utilities |
-| Providers | ✅ Complete | Gemini, Claude, Copilot with streaming |
+| Providers | ✅ Complete | Gemini, OpenAI, Copilot with streaming |
 | MCP Server | ✅ Complete | stdio transport, tool registration |
 | Tools | ✅ Complete | ai_chat, ai_compare, ai_review, ai_list |
 | Brain Integration | ✅ Complete | loader, auto-injection, ai_brain_chat |

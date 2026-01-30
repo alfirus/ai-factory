@@ -1,56 +1,55 @@
 {
-  "name": "@ebase/ai-factory",
-  "version": "1.0.0",
-  "description": "A local MCP server that gives OpenCode access to your paid AI subscriptions — Google Gemini, GitHub Copilot, and Anthropic Claude — through a unified interface.",
-  "main": "dist/index.js",
-  "type": "module",
-  "bin": "./dist/index.js",
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "directories": {
-    "doc": "docs"
-  },
-  "scripts": {
-    "build": "tsup src/index.ts --format esm --outDir dist",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alfirus/ai-factory.git"
-  },
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "ai",
-    "gemini",
-    "claude",
-    "copilot",
-    "opencode"
-  ],
-  "author": "Alfirus Ahmad",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/alfirus/ai-factory/issues"
-  },
-  "homepage": "https://github.com/alfirus/ai-factory#readme",
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.72.1",
-    "@google/genai": "^1.38.0",
-    "@modelcontextprotocol/sdk": "^1.25.3",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "openai": "^6.17.0",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@types/node": "^25.1.0",
-    "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
-  }
+	"name": "@ebase/ai-factory",
+	"version": "1.0.0",
+	"description": "A local MCP server that gives OpenCode access to your paid AI subscriptions — Google Gemini, GitHub Copilot, and OpenAI ChatGPT — through a unified interface.",
+	"main": "dist/index.js",
+	"type": "module",
+	"bin": "./dist/index.js",
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"directories": {
+		"doc": "docs"
+	},
+	"scripts": {
+		"build": "tsup src/index.ts --format esm --outDir dist",
+		"dev": "tsx watch src/index.ts",
+		"start": "node dist/index.js",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/alfirus/ai-factory.git"
+	},
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"ai",
+		"gemini",
+		"openai",
+		"copilot",
+		"opencode"
+	],
+	"author": "Alfirus Ahmad",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/alfirus/ai-factory/issues"
+	},
+	"homepage": "https://github.com/alfirus/ai-factory#readme",
+	"dependencies": {
+		"@google/genai": "^1.38.0",
+		"@modelcontextprotocol/sdk": "^1.25.3",
+		"dotenv": "^17.2.3",
+		"express": "^5.2.1",
+		"openai": "^6.17.0",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@types/node": "^25.1.0",
+		"tsup": "^8.5.1",
+		"tsx": "^4.21.0",
+		"typescript": "^5.9.3"
+	}
 }

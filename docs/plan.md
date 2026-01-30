@@ -1,6 +1,6 @@
 # AI Factory - MCP Server Implementation Plan
 
-An MCP (Model Context Protocol) server that exposes Google Gemini, GitHub Copilot, and Anthropic Claude as tools for [OpenCode](https://opencode.ai/).
+An MCP (Model Context Protocol) server that exposes Google Gemini, GitHub Copilot, and OpenAI ChatGPT as tools for [OpenCode](https://opencode.ai/).
 
 ---
 
@@ -12,7 +12,7 @@ AI Factory is a local MCP server that acts as a unified gateway to your paid AI 
 
 - Asking Gemini for a second opinion on a code approach
 - Using Copilot for code completions and suggestions
-- Delegating complex reasoning tasks to Claude
+- Delegating complex reasoning tasks to ChatGPT/OpenAI
 - Comparing responses across models for the same prompt
 
 ### Architecture
@@ -26,7 +26,7 @@ AI Factory MCP Server (Node.js)
     |
     +--- Google Gemini API (REST / @google/genai SDK)
     +--- GitHub Copilot API (copilot-api proxy or Copilot SDK)
-    +--- Anthropic Claude API (REST / @anthropic-ai/sdk)
+    +--- OpenAI ChatGPT API (REST / openai SDK)
 ```
 
 ### Tech Stack
@@ -39,7 +39,7 @@ AI Factory MCP Server (Node.js)
 | Transport            | stdio (recommended for local MCP in OpenCode)    |
 | Schema Validation    | `zod` (required peer dependency of MCP SDK)      |
 | Gemini Client        | `@google/genai` SDK                              |
-| Claude Client        | `@anthropic-ai/sdk`                              |
+| OpenAI Client        | `openai` SDK                                     |
 | Copilot Client       | `copilot-api` (reverse-engineered OpenAI-compat) |
 | Build                | `tsup` or `tsc`                                  |
 | Package Manager      | `npm` or `pnpm`                                  |
@@ -59,7 +59,7 @@ ai-factory/
       base.ts                # Shared provider interface & registry
       gemini.ts              # Google Gemini provider
       copilot.ts             # GitHub Copilot provider
-      claude.ts              # Anthropic Claude provider
+      openai.ts              # OpenAI ChatGPT provider
       index.ts               # Auto-registers all providers
     tools/
       chat.ts                # chat tool (send prompt to a provider)
@@ -156,33 +156,34 @@ async function chat(model: string, prompt: string, systemPrompt?: string) {
 
 **Note:** Users must have an active GitHub Copilot subscription (Individual, Business, or Enterprise) and be authenticated via `gh auth login`.
 
-### 3.3 Anthropic Claude
+### 3.3 OpenAI ChatGPT
 
-**Authentication:** API key via `ANTHROPIC_API_KEY` env var.
+**Authentication:** API key via `OPENAI_API_KEY` env var.
 
-**SDK:** `@anthropic-ai/sdk` (official Anthropic SDK)
+**SDK:** `openai` (official OpenAI SDK)
 
-**Endpoint:** `https://api.anthropic.com/v1/messages`
+**Endpoint:** `https://api.openai.com/v1/chat/completions`
 
-**Supported Models:** `claude-opus-4-5-20251101`, `claude-sonnet-4-20250514`, `claude-haiku-3-5-20241022`, etc.
+**Supported Models:** `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `o1-preview`, etc.
 
 **Implementation:**
 
 ```typescript
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 async function chat(model: string, prompt: string, systemPrompt?: string) {
-  const response = await anthropic.messages.create({
+  const response = await openai.chat.completions.create({
     model,
-    max_tokens: 8192,
-    system: systemPrompt || "",
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      { role: "system", content: systemPrompt || "You are a helpful assistant." },
+      { role: "user", content: prompt }
+    ],
   });
-  return response.content[0].type === "text" ? response.content[0].text : "";
+  return response.choices[0]?.message?.content || "";
 }
 ```
 
@@ -220,7 +221,7 @@ async function chat(model: string, prompt: string, systemPrompt?: string) {
 
 | Parameter       | Type   | Required | Description                                  |
 | --------------- | ------ | -------- | -------------------------------------------- |
-| `provider`      | enum   | Yes      | `"gemini"`, `"copilot"`, or `"claude"`       |
+| `provider`      | enum   | Yes      | `"gemini"`, `"copilot"`, or `"openai"`       |
 | `code`          | string | Yes      | The code to review                           |
 | `language`      | string | No       | Programming language (for context)           |
 | `focus`         | string | No       | Review focus: "bugs", "security", "perf", "style", or "all" |
@@ -315,7 +316,7 @@ export async function startServer() {
   // Register ai_chat tool
   server.tool(
     "ai_chat",
-    "Send a prompt to Google Gemini, GitHub Copilot, or Anthropic Claude",
+    "Send a prompt to Google Gemini, GitHub Copilot, or OpenAI ChatGPT",
     {
       provider: z.enum(["gemini", "copilot", "claude"]),
       prompt: z.string().describe("The prompt to send"),
@@ -354,13 +355,13 @@ export async function startServer() {
     "Compare responses from multiple AI providers for the same prompt",
     {
       prompt: z.string(),
-      providers: z.array(z.enum(["gemini", "copilot", "claude"])).optional(),
+      providers: z.array(z.enum(["gemini", "copilot", "openai"])).optional(),
       system_prompt: z.string().optional(),
       temperature: z.number().optional(),
       max_tokens: z.number().optional(),
     },
     async ({ prompt, providers, system_prompt, temperature, max_tokens }) => {
-      const targets = providers || ["gemini", "copilot", "claude"];
+      const targets = providers || ["gemini", "copilot", "openai"];
       const results = await Promise.allSettled(
         targets.map(async (name) => {
           const p = getProvider(name);
@@ -726,7 +727,7 @@ Both servers run **side by side** in OpenCode, giving the agent multi-model AI a
   then use ai_compare to get all three models' opinions on which
   pattern fits best
 
-> After implementing a feature, use ai_review with Claude, then
+> After implementing a feature, use ai_review with OpenAI, then
   brain_save_memory to persist the review feedback for next session
 
 > Load rules with brain_get_applicable_rules, then pass them as
@@ -816,7 +817,7 @@ npx @modelcontextprotocol/inspector node dist/index.js
 | 1    | Project scaffolding (package.json, tsconfig, .gitignore) | High     |
 | 2    | Provider interface, registry, and auto-registration      | High     |
 | 3    | Gemini provider                                          | High     |
-| 4    | Claude provider                                          | High     |
+| 4    | OpenAI provider                                          | High     |
 | 5    | MCP server with `ai_chat` + `ai_list` tools              | High     |
 | 6    | Timeout wrapper + stderr logging                         | High     |
 | 7    | Copilot provider (via copilot-api)                       | Medium   |
@@ -871,7 +872,7 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 ## 13. Future: Deep Integration with AI Brain MCP
 
-Phase 2 goes beyond side-by-side — AI Factory **reads AI Brain files directly** to enrich every prompt sent to Gemini, Claude, or Copilot. This turns AI Factory into a brain-aware multi-model gateway.
+Phase 2 goes beyond side-by-side — AI Factory **reads AI Brain files directly** to enrich every prompt sent to Gemini, OpenAI, or Copilot. This turns AI Factory into a brain-aware multi-model gateway.
 
 ### 13.1 Architecture
 
@@ -885,7 +886,7 @@ OpenCode (MCP Client)
               +--- reads ai-brain/ files directly (via AI_BRAIN_PATH env)
               |
               +--- Gemini API (with persona + rules injected as system prompt)
-              +--- Claude API  (with persona + rules injected as system prompt)
+              +--- OpenAI API  (with persona + rules injected as system prompt)
               +--- Copilot API (with persona + rules injected as system prompt)
 ```
 
@@ -978,7 +979,7 @@ A dedicated tool that always loads brain context and allows selecting which brai
 
 | Parameter       | Type     | Required | Description                                       |
 | --------------- | -------- | -------- | ------------------------------------------------- |
-| `provider`      | enum     | Yes      | `"gemini"`, `"copilot"`, or `"claude"`            |
+| `provider`      | enum     | Yes      | `"gemini"`, `"copilot"`, or `"openai"`            |
 | `prompt`        | string   | Yes      | The prompt to send                                |
 | `brain_modules` | string[] | No       | Which brain modules to load: `["persona", "rules", "knowledge"]` |
 | `persona`       | string   | No       | Persona name (default: `"default"`)               |
@@ -1063,7 +1064,7 @@ This is a **low-priority enhancement** — stdio covers the primary use case of 
 - [OpenCode Configuration](https://opencode.ai/docs/config/)
 - [Google Gemini API](https://ai.google.dev/api)
 - [Gemini OpenAI-Compatible Endpoint](https://ai.google.dev/gemini-api/docs/openai)
-- [Anthropic Claude API](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector)
+- [OpenAI API](https://platform.openai.com/docs/api-reference)
 - [copilot-api (Reverse-Engineered Copilot Proxy)](https://github.com/ericc-ch/copilot-api)
 - [GitHub Copilot SDK (Technical Preview)](https://github.blog/changelog/2026-01-14-copilot-sdk-in-technical-preview/)
 - [OpenAI Build MCP Server Guide](https://developers.openai.com/apps-sdk/build/mcp-server/)

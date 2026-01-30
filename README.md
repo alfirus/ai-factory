@@ -1,6 +1,6 @@
 # AI Factory
 
-A local MCP server that gives [OpenCode](https://opencode.ai/) access to your paid AI subscriptions — Google Gemini, GitHub Copilot, and Anthropic Claude — through a unified interface.
+A local MCP server that gives [OpenCode](https://opencode.ai/) access to your paid AI subscriptions — Google Gemini, GitHub Copilot, and OpenAI ChatGPT — through a unified interface.
 
 ## Features
 
@@ -40,16 +40,16 @@ A local MCP server that gives [OpenCode](https://opencode.ai/) access to your pa
 - Pricing: [ai.google.dev/pricing](https://ai.google.dev/pricing)
 - Models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.0-flash`
 
-### Anthropic Claude
+### OpenAI ChatGPT
 
-1. Go to [Anthropic Console](https://console.anthropic.com/)
+1. Go to [OpenAI Platform](https://platform.openai.com/)
 2. Create an account or sign in
-3. Go to **Settings > API keys** ([direct link](https://console.anthropic.com/settings/keys))
-4. Click **Create Key**, name it (e.g. `ai-factory`), copy the key (looks like `sk-ant-api03-...`)
+3. Go to **API keys** ([direct link](https://platform.openai.com/api-keys))
+4. Click **Create new secret key**, name it (e.g. `ai-factory`), copy the key (looks like `sk-proj-...`)
 
-- No free tier — add payment method under **Settings > Billing** first
-- Pricing: [anthropic.com/pricing](https://www.anthropic.com/pricing#anthropic-api)
-- Models: `claude-opus-4-5-20251101`, `claude-sonnet-4-20250514`, `claude-haiku-3-5-20241022`
+- No free tier — add payment method under **Billing** first
+- Pricing: [openai.com/pricing](https://openai.com/pricing)
+- Models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `o1-preview`
 
 ### GitHub Copilot
 
@@ -89,9 +89,9 @@ npm run build
 GEMINI_API_KEY=your-gemini-api-key
 GEMINI_DEFAULT_MODEL=gemini-2.5-flash              # optional
 
-# Anthropic Claude
-ANTHROPIC_API_KEY=your-anthropic-api-key
-ANTHROPIC_DEFAULT_MODEL=claude-sonnet-4-20250514    # optional
+# OpenAI ChatGPT
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_DEFAULT_MODEL=gpt-4o                        # optional
 
 # GitHub Copilot (via copilot-api proxy)
 COPILOT_API_PORT=4141                               # optional
@@ -115,7 +115,7 @@ Only configure the providers you plan to use.
 Multi-turn conversation with history.
 
 ```
-provider: "gemini" | "claude" | "copilot" (required)
+provider: "gemini" | "openai" | "copilot" (required)
 prompt: string (required)
 model: string (optional - overrides default model)
 system_prompt: string (optional)
@@ -126,8 +126,8 @@ max_tokens: number (optional)
 
 Example:
 ```
-> Use ai_chat with provider "claude" to explain this algorithm
-> claude-id: abc123 (conversation stored, follow-up will reference it)
+> Use ai_chat with provider "openai" to explain this algorithm
+> openai-id: abc123 (conversation stored, follow-up will reference it)
 ```
 
 #### `ai_compare`
@@ -135,7 +135,7 @@ Compare responses from multiple providers.
 
 ```
 prompt: string (required)
-providers: ["gemini", "claude", "copilot"] (optional - defaults to all available)
+providers: ["gemini", "openai", "copilot"] (optional - defaults to all available)
 system_prompt: string (optional)
 temperature: 0-1 (optional)
 max_tokens: number (optional)
@@ -150,7 +150,7 @@ Example:
 Code review focused on specific areas.
 
 ```
-provider: "gemini" | "claude" | "copilot" (required)
+provider: "gemini" | "openai" | "copilot" (required)
 code: string (required)
 language: string (optional - e.g., "python", "typescript")
 focus: "bugs" | "security" | "perf" | "style" | "all" (optional - defaults to "all")
@@ -160,7 +160,7 @@ max_tokens: number (optional)
 
 Example:
 ```
-> Use ai_review with provider claude to check this code for security issues (language: typescript)
+> Use ai_review with provider openai to check this code for security issues (language: typescript)
 ```
 
 #### `ai_list`
@@ -221,9 +221,9 @@ This applies contextual expertise to every conversation.
 Example:
 ```
 With AI_BRAIN_PATH set:
-> Use ai_chat with provider claude to design an auth system
+> Use ai_chat with provider openai to design an auth system
   ↓
-Claude automatically gets your persona + rules as context
+OpenAI automatically gets your persona + rules as context
 ```
 
 Override with explicit `system_prompt` to skip auto-injection:
@@ -237,7 +237,7 @@ Only the provided prompt is used (no brain context)
 Selectively load brain modules for a single request.
 
 ```
-provider: "gemini" | "claude" | "copilot" (required)
+provider: "gemini" | "openai" | "copilot" (required)
 prompt: string (required)
 model: string (optional)
 persona: string (optional - defaults to "default")
@@ -249,7 +249,7 @@ max_tokens: number (optional)
 
 Example:
 ```
-> Use ai_brain_chat with provider claude, modules ["persona", "rules", "knowledge"] and knowledge_query "database migration" to design a migration strategy
+> Use ai_brain_chat with provider openai, modules ["persona", "rules", "knowledge"] and knowledge_query "database migration" to design a migration strategy
 ```
 
 #### Knowledge Search (Phase 3.4)
@@ -279,7 +279,7 @@ Run AI Factory and AI Brain together:
       "args": ["/path/to/ai-factory/dist/index.js"],
       "env": {
         "GEMINI_API_KEY": "...",
-        "ANTHROPIC_API_KEY": "...",
+        "OPENAI_API_KEY": "...",
         "AI_BRAIN_PATH": "/path/to/ai-brain"
       }
     },
@@ -299,8 +299,8 @@ Run AI Factory and AI Brain together:
 **Workflow 1: Auto-Injected Context**
 ```
 With AI_BRAIN_PATH set:
-1. > Use ai_chat with provider claude to design the API
-2. Claude gets your persona + rules automatically
+1. > Use ai_chat with provider openai to design the API
+2. OpenAI gets your persona + rules automatically
 3. Response reflects your development philosophy
 ```
 
