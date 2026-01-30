@@ -4,9 +4,18 @@ A local MCP server that gives [OpenCode](https://opencode.ai/) access to your pa
 
 ## Features
 
-- **`ai_chat`** — Send a prompt to Gemini, Copilot, or Claude
-- **`ai_compare`** — Compare responses from multiple providers side by side
-- **`ai_review`** — Code review by a selected model (bugs, security, perf, style)
+### Phase 1 - Core (Standalone)
+- **`ai_chat`** — Multi-turn conversation with a single provider
+- **`ai_compare`** — Side-by-side comparison of responses from multiple providers
+- **`ai_review`** — Code review with focus options (bugs, security, perf, style)
+- **`ai_list`** — Display configured providers and their status
+- **`providers://status`** — MCP Resource showing provider configuration
+
+### Phase 2 & 3 - AI Brain Integration
+- **`ai_brain_chat`** — Chat with AI Brain context (persona, rules, knowledge)
+- **Auto-injection** — `ai_chat` automatically includes brain context when available
+- **Knowledge Search** — Query your AI Brain knowledge base
+- **Deep Integration** — Load personas and rules from your AI Brain
 
 ## Prerequisites
 
@@ -87,43 +96,298 @@ ANTHROPIC_DEFAULT_MODEL=claude-sonnet-4-20250514    # optional
 # GitHub Copilot (via copilot-api proxy)
 COPILOT_API_PORT=4141                               # optional
 COPILOT_DEFAULT_MODEL=gpt-4o                        # optional
+
+# AI Brain Integration (Phase 2/3)
+AI_BRAIN_PATH=/path/to/your/ai-brain                # optional
+LOG_LEVEL=info                                       # debug, info, warn, error
+REQUEST_TIMEOUT_MS=30000                             # optional
 ```
 
 Only configure the providers you plan to use.
 
 ---
 
-## OpenCode Configuration
+## Phase 1: Standalone Usage
 
-Add to `opencode.json` (project root or `~/.config/opencode/opencode.json`):
+### Tools
+
+#### `ai_chat`
+Multi-turn conversation with history.
+
+```
+provider: "gemini" | "claude" | "copilot" (required)
+prompt: string (required)
+model: string (optional - overrides default model)
+system_prompt: string (optional)
+conversation_id: string (optional - for multi-turn)
+temperature: 0-1 (optional)
+max_tokens: number (optional)
+```
+
+Example:
+```
+> Use ai_chat with provider "claude" to explain this algorithm
+> claude-id: abc123 (conversation stored, follow-up will reference it)
+```
+
+#### `ai_compare`
+Compare responses from multiple providers.
+
+```
+prompt: string (required)
+providers: ["gemini", "claude", "copilot"] (optional - defaults to all available)
+system_prompt: string (optional)
+temperature: 0-1 (optional)
+max_tokens: number (optional)
+```
+
+Example:
+```
+> Use ai_compare to get all three models' opinions on this REST API design
+```
+
+#### `ai_review`
+Code review focused on specific areas.
+
+```
+provider: "gemini" | "claude" | "copilot" (required)
+code: string (required)
+language: string (optional - e.g., "python", "typescript")
+focus: "bugs" | "security" | "perf" | "style" | "all" (optional - defaults to "all")
+temperature: 0-1 (optional)
+max_tokens: number (optional)
+```
+
+Example:
+```
+> Use ai_review with provider claude to check this code for security issues (language: typescript)
+```
+
+#### `ai_list`
+Show configured providers and their status.
+
+```
+> Use ai_list to see which providers are configured
+```
+
+---
+
+## Phase 2 & 3: AI Brain Integration
+
+AI Factory can integrate with **AI Brain** — a companion MCP server that manages your development knowledge base.
+
+### Setting Up AI Brain Context
+
+1. Create an `ai-brain` directory with this structure:
+   ```
+   ai-brain/
+     personas/
+       default.md         # Your default development persona
+     rules/
+       core.md           # Your core development rules
+     knowledge/
+       best-practices.md
+       patterns/
+         architectural.md
+   ```
+
+2. Set the path in your environment:
+   ```bash
+   export AI_BRAIN_PATH=/path/to/ai-brain
+   ```
+
+3. Optional: Run AI Brain MCP alongside AI Factory:
+   ```json
+   {
+     "mcpServers": {
+       "ai-factory": {...},
+       "ai-brain": {
+         "command": "node",
+         "args": ["/path/to/ai-brain/dist/index.js"]
+       }
+     }
+   }
+   ```
+
+### Features
+
+#### Auto-Injection (Phase 3.2)
+When `AI_BRAIN_PATH` is set and no explicit `system_prompt` is provided, `ai_chat` automatically injects:
+- Your default persona
+- Your core development rules
+
+This applies contextual expertise to every conversation.
+
+Example:
+```
+With AI_BRAIN_PATH set:
+> Use ai_chat with provider claude to design an auth system
+  ↓
+Claude automatically gets your persona + rules as context
+```
+
+Override with explicit `system_prompt` to skip auto-injection:
+```
+> Use ai_chat with provider gemini and system_prompt "you are a security expert" to design an auth system
+  ↓
+Only the provided prompt is used (no brain context)
+```
+
+#### `ai_brain_chat` (Phase 3.3)
+Selectively load brain modules for a single request.
+
+```
+provider: "gemini" | "claude" | "copilot" (required)
+prompt: string (required)
+model: string (optional)
+persona: string (optional - defaults to "default")
+brain_modules: ["persona" | "rules" | "knowledge"] (optional)
+knowledge_query: string (optional - search knowledge base)
+temperature: 0-1 (optional)
+max_tokens: number (optional)
+```
+
+Example:
+```
+> Use ai_brain_chat with provider claude, modules ["persona", "rules", "knowledge"] and knowledge_query "database migration" to design a migration strategy
+```
+
+#### Knowledge Search (Phase 3.4)
+The `knowledge_query` parameter searches your knowledge base for relevant files.
+
+Example:
+```
+> Use ai_brain_chat with provider gemini, modules ["knowledge"] and knowledge_query "docker" to containerize this application
+  ↓
+Searches knowledge/ for files mentioning "docker"
+Includes matches in system prompt
+```
+
+---
+
+## Advanced Configuration
+
+### Combined OpenCode Setup (Phase 2)
+
+Run AI Factory and AI Brain together:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
+  "mcpServers": {
     "ai-factory": {
-      "type": "local",
-      "command": ["node", "/absolute/path/to/ai-factory/dist/index.js"],
-      "environment": {
-        "GEMINI_API_KEY": "your-gemini-api-key",
-        "ANTHROPIC_API_KEY": "your-anthropic-api-key",
-        "COPILOT_API_PORT": "4141"
-      },
-      "enabled": true
+      "command": "node",
+      "args": ["/path/to/ai-factory/dist/index.js"],
+      "env": {
+        "GEMINI_API_KEY": "...",
+        "ANTHROPIC_API_KEY": "...",
+        "AI_BRAIN_PATH": "/path/to/ai-brain"
+      }
+    },
+    "ai-brain": {
+      "command": "node",
+      "args": ["/path/to/ai-brain/dist/index.js"],
+      "env": {
+        "BRAIN_PATH": "/path/to/ai-brain"
+      }
     }
   }
 }
 ```
 
-## Usage
+### Example Workflows
 
+**Workflow 1: Auto-Injected Context**
 ```
-> Use ai_chat to ask Gemini to suggest a caching strategy for this API
-
-> Use ai_compare to get opinions from all three models on this database schema
-
-> Use ai_review with Claude to review the auth module for security issues
+With AI_BRAIN_PATH set:
+1. > Use ai_chat with provider claude to design the API
+2. Claude gets your persona + rules automatically
+3. Response reflects your development philosophy
 ```
+
+**Workflow 2: Selective Brain Modules**
+```
+> Use ai_brain_chat with provider gemini, modules ["knowledge"], knowledge_query "testing" to review this test file
+1. Searches knowledge/ for testing resources
+2. Loads only knowledge (not persona/rules)
+3. Provides targeted expertise
+```
+
+**Workflow 3: Comparison with Context**
+```
+> Use ai_compare to get opinions on this architecture (system_prompt from brain)
+1. All three models get your architectural persona
+2. Responses are tailored to your preferences
+3. Consistent perspective across providers
+```
+
+---
+
+## Phase 4: Optional Enhancements
+
+### HTTP Transport (Remote Deployment)
+
+AI Factory supports both stdio (default, local) and HTTP (remote) transports.
+
+#### Enable HTTP Mode
+
+Set the `TRANSPORT` environment variable:
+
+```bash
+TRANSPORT=http HTTP_PORT=3000 npm start
+```
+
+#### HTTP Endpoints
+
+- **GET `/health`** — Health check
+  ```bash
+  curl http://localhost:3000/health
+  ```
+
+- **GET `/providers`** — List provider status (JSON)
+  ```bash
+  curl http://localhost:3000/providers
+  ```
+
+- **POST `/mcp`** — MCP request handler
+  ```bash
+  curl -X POST http://localhost:3000/mcp \
+    -H "Content-Type: application/json" \
+    -d '{"method": "tools/list"}'
+  ```
+
+#### Authentication (Optional)
+
+Set `AUTH_TOKEN` to require Bearer token authentication:
+
+```bash
+AUTH_TOKEN=secret-token TRANSPORT=http npm start
+```
+
+All requests must include:
+```
+Authorization: Bearer secret-token
+```
+
+#### Remote OpenCode Config
+
+Use with OpenCode remote MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "ai-factory": {
+      "type": "remote",
+      "url": "http://your-server:3000",
+      "auth": {
+        "type": "bearer",
+        "token": "secret-token"
+      }
+    }
+  }
+}
+```
+
+---
 
 ## Development
 

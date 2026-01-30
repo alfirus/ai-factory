@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "ai-factory": {
+      "command": "node",
+      "args": ["/path/to/ai-factory/dist/index.js"],
+      "env": {
+        "GEMINI_API_KEY": "your-gemini-key",
+        "ANTHROPIC_API_KEY": "your-anthropic-key",
+        "COPILOT_API_PORT": "4141",
+        "AI_BRAIN_PATH": "/path/to/ai-brain",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "ai-brain": {
+      "command": "node",
+      "args": ["/path/to/ai-brain/dist/index.js"],
+      "env": {
+        "BRAIN_PATH": "/path/to/ai-brain",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
