@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Tool, TextContent, ResourceContents } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { logger } from "./utils/logger.js";
 import { registerAllProviders, getProvider, getAllProviders, ChatMessage } from "./providers/index.js";
 import { buildReviewPrompt } from "./tools/prompts.js";
@@ -77,401 +78,407 @@ const aiBrainChatSchema = z.object({
 
 const aiListSchema = z.object({});
 
-server.setRequestHandler(async (request) => {
-  if (request.method === "tools/list") {
-    const tools: Tool[] = [
-      {
-        name: "ai_chat",
-        description: "Send a prompt to a specific AI provider with optional conversation history",
-        inputSchema: aiChatSchema,
-      },
-      {
-        name: "ai_compare",
-        description: "Send a prompt to multiple providers and compare responses",
-        inputSchema: aiCompareSchema,
-      },
-      {
-        name: "ai_review",
-        description: "Review code using a selected AI provider",
-        inputSchema: aiReviewSchema,
-      },
-      {
-        name: "ai_list",
-        description: "List configured AI providers and their status",
-        inputSchema: aiListSchema,
-      },
-    ];
-    
-    // Add ai_brain_chat if brain is available
-    if (isBrainAvailable()) {
-      tools.push({
-        name: "ai_brain_chat",
-        description: "Send a prompt to a provider with AI Brain context (persona, rules, knowledge)",
-        inputSchema: aiBrainChatSchema,
-      });
-    }
-    
-    return { tools };
-  }
+const toInputSchema = (schema: z.ZodTypeAny): Tool['inputSchema'] => zodToJsonSchema(schema as unknown as z.ZodTypeAny) as Tool['inputSchema'];
 
-  if (request.method === "tools/call") {
-    const { name, arguments: args } = request.params;
+// Request handler schema
+const requestSchema = z
+	.object({
+		method: z.union([z.literal('tools/list'), z.literal('tools/call'), z.literal('resources/list'), z.literal('resources/read')]),
+	})
+	.passthrough();
 
-    try {
-      if (name === "ai_chat") {
-        const parsed = aiChatSchema.parse(args);
-        const provider = getProvider(parsed.provider);
+// Request handler
+server.setRequestHandler(requestSchema, async (request) => {
+	if (request.method === 'tools/list') {
+		const tools: Tool[] = [
+			{
+				name: 'ai_chat',
+				description: 'Send a prompt to a specific AI provider with optional conversation history',
+				inputSchema: toInputSchema(aiChatSchema),
+			},
+			{
+				name: 'ai_compare',
+				description: 'Send a prompt to multiple providers and compare responses',
+				inputSchema: toInputSchema(aiCompareSchema),
+			},
+			{
+				name: 'ai_review',
+				description: 'Review code using a selected AI provider',
+				inputSchema: toInputSchema(aiReviewSchema),
+			},
+			{
+				name: 'ai_list',
+				description: 'List configured AI providers and their status',
+				inputSchema: toInputSchema(aiListSchema),
+			},
+		];
 
-        if (!provider) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Provider "${parsed.provider}" not found`,
-              },
-            ],
-            isError: true,
-          };
-        }
+		// Add ai_brain_chat if brain is available
+		if (isBrainAvailable()) {
+			tools.push({
+				name: 'ai_brain_chat',
+				description: 'Send a prompt to a provider with AI Brain context (persona, rules, knowledge)',
+				inputSchema: toInputSchema(aiBrainChatSchema),
+			});
+		}
 
-        if (!provider.isAvailable()) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Provider "${parsed.provider}" is not configured`,
-              },
-            ],
-            isError: true,
-          };
-        }
+		return { tools };
+	}
 
-        const conversationId = parsed.conversation_id || `conv-${Date.now()}`;
-        let history = getConversation(conversationId, parsed.provider);
+	if (request.method === 'tools/call') {
+		const { name, arguments: args } = request.params as { name: string; arguments?: unknown };
 
-        // Add user message to history
-        history.push({
-          role: "user",
-          content: parsed.prompt,
-        });
+		try {
+			if (name === 'ai_chat') {
+				const parsed = aiChatSchema.parse(args);
+				const provider = getProvider(parsed.provider);
 
-        // Determine system prompt: explicit override, or auto-inject brain if available
-        let systemPrompt = parsed.system_prompt;
-        if (!systemPrompt && isBrainAvailable()) {
-          const persona = loadPersona("default");
-          const rules = loadCoreRules();
-          if (persona || rules) {
-            const parts = [];
-            if (persona) parts.push("## Persona\n" + persona);
-            if (rules) parts.push("## Rules\n" + rules);
-            systemPrompt = parts.join("\n\n---\n\n");
-            logger.debug("Auto-injected brain context into ai_chat");
-          }
-        }
+				if (!provider) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: `Provider "${parsed.provider}" not found`,
+							},
+						],
+						isError: true,
+					};
+				}
 
-        // Call provider
-        const chatModel = parsed.model || provider.defaultModel;
-								const response = await usageTracker.track(parsed.provider, chatModel, 'ai_chat', () =>
-									provider.chat(history, {
-										model: parsed.model,
-										systemPrompt,
-										temperature: parsed.temperature,
-										maxTokens: parsed.max_tokens,
-									}),
-								);
+				if (!provider.isAvailable()) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: `Provider "${parsed.provider}" is not configured`,
+							},
+						],
+						isError: true,
+					};
+				}
 
-        // Add assistant response to history
-        history.push({
-          role: "assistant",
-          content: response,
-        });
+				const conversationId = parsed.conversation_id || `conv-${Date.now()}`;
+				let history = getConversation(conversationId, parsed.provider);
 
-        // Save conversation
-        setConversation(conversationId, parsed.provider, history);
+				// Add user message to history
+				history.push({
+					role: 'user',
+					content: parsed.prompt,
+				});
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: response,
-            },
-          ],
-          meta: {
-            conversation_id: conversationId,
-            provider: parsed.provider,
-            model: parsed.model || provider.defaultModel,
-          },
-        };
-      }
+				// Determine system prompt: explicit override, or auto-inject brain if available
+				let systemPrompt = parsed.system_prompt;
+				if (!systemPrompt && isBrainAvailable()) {
+					const persona = loadPersona('default');
+					const rules = loadCoreRules();
+					if (persona || rules) {
+						const parts = [];
+						if (persona) parts.push('## Persona\n' + persona);
+						if (rules) parts.push('## Rules\n' + rules);
+						systemPrompt = parts.join('\n\n---\n\n');
+						logger.debug('Auto-injected brain context into ai_chat');
+					}
+				}
 
-      if (name === "ai_compare") {
-        const parsed = aiCompareSchema.parse(args);
-        const targetProviders = parsed.providers
-          ? parsed.providers.map((name) => getProvider(name)).filter((p) => p !== undefined)
-          : getAllProviders().filter((p) => p.isAvailable());
+				// Call provider
+				const chatModel = parsed.model || provider.defaultModel;
+				const response = await usageTracker.track(parsed.provider, chatModel, 'ai_chat', () =>
+					provider.chat(history, {
+						model: parsed.model,
+						systemPrompt,
+						temperature: parsed.temperature,
+						maxTokens: parsed.max_tokens,
+					}),
+				);
 
-        if (targetProviders.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "No available providers found",
-              },
-            ],
-            isError: true,
-          };
-        }
+				// Add assistant response to history
+				history.push({
+					role: 'assistant',
+					content: response,
+				});
 
-        const results = await Promise.allSettled(
-          targetProviders.map(async (provider) => {
-            const response = await usageTracker.track(provider.name, provider.defaultModel, 'ai_compare', () =>
-													provider.chat(parsed.prompt, {
-														systemPrompt: parsed.system_prompt,
-														temperature: parsed.temperature,
-														maxTokens: parsed.max_tokens,
-													}),
-												);
-            return { provider: provider.name, response };
-          })
-        );
+				// Save conversation
+				setConversation(conversationId, parsed.provider, history);
 
-        const comparisons = results
-          .map((result) => {
-            if (result.status === "fulfilled") {
-              return `## ${result.value.provider}\n\n${result.value.response}`;
-            } else {
-              return `## ${(result.reason as any)?.provider || "unknown"}\n\n**Error:** ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`;
-            }
-          })
-          .join("\n\n---\n\n");
+				return {
+					content: [
+						{
+							type: 'text',
+							text: response,
+						},
+					],
+					meta: {
+						conversation_id: conversationId,
+						provider: parsed.provider,
+						model: parsed.model || provider.defaultModel,
+					},
+				};
+			}
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: comparisons,
-            },
-          ],
-        };
-      }
+			if (name === 'ai_compare') {
+				const parsed = aiCompareSchema.parse(args);
+				const targetProviders = parsed.providers ? parsed.providers.map((name) => getProvider(name)).filter((p) => p !== undefined) : getAllProviders().filter((p) => p.isAvailable());
 
-      if (name === "ai_review") {
-        const parsed = aiReviewSchema.parse(args);
-        const provider = getProvider(parsed.provider);
+				if (targetProviders.length === 0) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: 'No available providers found',
+							},
+						],
+						isError: true,
+					};
+				}
 
-        if (!provider) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Provider "${parsed.provider}" not found`,
-              },
-            ],
-            isError: true,
-          };
-        }
+				const results = await Promise.allSettled(
+					targetProviders.map(async (provider) => {
+						const response = await usageTracker.track(provider.name, provider.defaultModel, 'ai_compare', () =>
+							provider.chat(parsed.prompt, {
+								systemPrompt: parsed.system_prompt,
+								temperature: parsed.temperature,
+								maxTokens: parsed.max_tokens,
+							}),
+						);
+						return { provider: provider.name, response };
+					}),
+				);
 
-        if (!provider.isAvailable()) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Provider "${parsed.provider}" is not configured`,
-              },
-            ],
-            isError: true,
-          };
-        }
+				const comparisons = results
+					.map((result) => {
+						if (result.status === 'fulfilled') {
+							return `## ${result.value.provider}\n\n${result.value.response}`;
+						} else {
+							return `## ${(result.reason as any)?.provider || 'unknown'}\n\n**Error:** ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`;
+						}
+					})
+					.join('\n\n---\n\n');
 
-        const reviewPrompt = buildReviewPrompt(parsed.code, parsed.language, parsed.focus as any);
-        const response = await usageTracker.track(parsed.provider, provider.defaultModel, 'ai_review', () =>
-									provider.chat(reviewPrompt, {
-										model: undefined,
-										temperature: parsed.temperature,
-										maxTokens: parsed.max_tokens,
-									}),
-								);
+				return {
+					content: [
+						{
+							type: 'text',
+							text: comparisons,
+						},
+					],
+				};
+			}
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: response,
-            },
-          ],
-          meta: {
-            provider: parsed.provider,
-            focus: parsed.focus || "all",
-          },
-        };
-      }
+			if (name === 'ai_review') {
+				const parsed = aiReviewSchema.parse(args);
+				const provider = getProvider(parsed.provider);
 
-      if (name === "ai_brain_chat") {
-        if (!isBrainAvailable()) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "AI Brain is not available. Please set AI_BRAIN_PATH environment variable.",
-              },
-            ],
-            isError: true,
-          };
-        }
+				if (!provider) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: `Provider "${parsed.provider}" not found`,
+							},
+						],
+						isError: true,
+					};
+				}
 
-        const parsed = aiBrainChatSchema.parse(args);
-        const provider = getProvider(parsed.provider);
+				if (!provider.isAvailable()) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: `Provider "${parsed.provider}" is not configured`,
+							},
+						],
+						isError: true,
+					};
+				}
 
-        if (!provider) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Provider "${parsed.provider}" not found`,
-              },
-            ],
-            isError: true,
-          };
-        }
+				const reviewPrompt = buildReviewPrompt(parsed.code, parsed.language, parsed.focus as any);
+				const response = await usageTracker.track(parsed.provider, provider.defaultModel, 'ai_review', () =>
+					provider.chat(reviewPrompt, {
+						model: undefined,
+						temperature: parsed.temperature,
+						maxTokens: parsed.max_tokens,
+					}),
+				);
 
-        if (!provider.isAvailable()) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Provider "${parsed.provider}" is not configured`,
-              },
-            ],
-            isError: true,
-          };
-        }
+				return {
+					content: [
+						{
+							type: 'text',
+							text: response,
+						},
+					],
+					meta: {
+						provider: parsed.provider,
+						focus: parsed.focus || 'all',
+					},
+				};
+			}
 
-        // Build brain context
-        const brainSystemPrompt = await buildBrainSystemPrompt({
-          persona: parsed.persona,
-          modules: parsed.brain_modules,
-          knowledgeQuery: parsed.knowledge_query,
-        });
+			if (name === 'ai_brain_chat') {
+				if (!isBrainAvailable()) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: 'AI Brain is not available. Please set AI_BRAIN_PATH environment variable.',
+							},
+						],
+						isError: true,
+					};
+				}
 
-        // Call provider with brain context
-        const brainModel = parsed.model || provider.defaultModel;
-								const response = await usageTracker.track(parsed.provider, brainModel, 'ai_brain_chat', () =>
-									provider.chat(parsed.prompt, {
-										model: parsed.model,
-										systemPrompt: brainSystemPrompt,
-										temperature: parsed.temperature,
-										maxTokens: parsed.max_tokens,
-									}),
-								);
+				const parsed = aiBrainChatSchema.parse(args);
+				const provider = getProvider(parsed.provider);
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: response,
-            },
-          ],
-          meta: {
-            provider: parsed.provider,
-            model: parsed.model || provider.defaultModel,
-            brain_modules: parsed.brain_modules || ["persona", "rules"],
-          },
-        };
-      }
+				if (!provider) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: `Provider "${parsed.provider}" not found`,
+							},
+						],
+						isError: true,
+					};
+				}
 
-      if (name === "ai_list") {
-        const providers = getAllProviders().map((p) => ({
-          name: p.name,
-          configured: p.isAvailable(),
-          defaultModel: p.defaultModel,
-        }));
+				if (!provider.isAvailable()) {
+					return {
+						content: [
+							{
+								type: 'text',
+								text: `Provider "${parsed.provider}" is not configured`,
+							},
+						],
+						isError: true,
+					};
+				}
 
-        const table = providers
-          .map((p) => `| ${p.name} | ${p.configured ? "✓" : "✗"} | ${p.defaultModel} |`)
-          .join("\n");
+				// Build brain context
+				const brainSystemPrompt = await buildBrainSystemPrompt({
+					persona: parsed.persona,
+					modules: parsed.brain_modules,
+					knowledgeQuery: parsed.knowledge_query,
+				});
 
-        const output = `| Provider | Configured | Default Model |\n|----------|------------|-----------|\n${table}`;
+				// Call provider with brain context
+				const brainModel = parsed.model || provider.defaultModel;
+				const response = await usageTracker.track(parsed.provider, brainModel, 'ai_brain_chat', () =>
+					provider.chat(parsed.prompt, {
+						model: parsed.model,
+						systemPrompt: brainSystemPrompt,
+						temperature: parsed.temperature,
+						maxTokens: parsed.max_tokens,
+					}),
+				);
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: output,
-            },
-          ],
-        };
-      }
+				return {
+					content: [
+						{
+							type: 'text',
+							text: response,
+						},
+					],
+					meta: {
+						provider: parsed.provider,
+						model: parsed.model || provider.defaultModel,
+						brain_modules: parsed.brain_modules || ['persona', 'rules'],
+					},
+				};
+			}
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Unknown tool: ${name}`,
-          },
-        ],
-        isError: true,
-      };
-    } catch (error) {
-      logger.error("Tool call error", error);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+			if (name === 'ai_list') {
+				const providers = getAllProviders().map((p) => ({
+					name: p.name,
+					configured: p.isAvailable(),
+					defaultModel: p.defaultModel,
+				}));
 
-  if (request.method === "resources/list") {
-    return {
-      resources: [
-        {
-          uri: "providers://status",
-          name: "AI Provider Status",
-          mimeType: "application/json",
-          description: "Current status of all configured AI providers",
-        },
-      ],
-    };
-  }
+				const table = providers.map((p) => `| ${p.name} | ${p.configured ? '✓' : '✗'} | ${p.defaultModel} |`).join('\n');
 
-  if (request.method === "resources/read") {
-    const { uri } = request.params;
-    if (uri === "providers://status") {
-      const providers = getAllProviders().map((p) => ({
-        name: p.name,
-        configured: p.isAvailable(),
-        defaultModel: p.defaultModel,
-      }));
+				const output = `| Provider | Configured | Default Model |\n|----------|------------|-----------|\n${table}`;
 
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: "application/json",
-            text: JSON.stringify(providers, null, 2),
-          } as ResourceContents,
-        ],
-      };
-    }
+				return {
+					content: [
+						{
+							type: 'text',
+							text: output,
+						},
+					],
+				};
+			}
 
-    return {
-      contents: [],
-    };
-  }
+			return {
+				content: [
+					{
+						type: 'text',
+						text: `Unknown tool: ${name}`,
+					},
+				],
+				isError: true,
+			};
+		} catch (error) {
+			logger.error('Tool call error', error);
+			return {
+				content: [
+					{
+						type: 'text',
+						text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+					},
+				],
+				isError: true,
+			};
+		}
+	}
 
-  return {
-    content: [
-      {
-        type: "text",
-        text: `Unknown request: ${request.method}`,
-      },
-    ],
-    isError: true,
-  };
+	if (request.method === 'resources/list') {
+		return {
+			resources: [
+				{
+					uri: 'providers://status',
+					name: 'AI Provider Status',
+					mimeType: 'application/json',
+					description: 'Current status of all configured AI providers',
+				},
+			],
+		};
+	}
+
+	if (request.method === 'resources/read') {
+		const { uri } = request.params;
+		if (uri === 'providers://status') {
+			const providers = getAllProviders().map((p) => ({
+				name: p.name,
+				configured: p.isAvailable(),
+				defaultModel: p.defaultModel,
+			}));
+
+			return {
+				contents: [
+					{
+						uri,
+						mimeType: 'application/json',
+						text: JSON.stringify(providers, null, 2),
+					} as ResourceContents,
+				],
+			};
+		}
+
+		return {
+			contents: [],
+		};
+	}
+
+	return {
+		content: [
+			{
+				type: 'text',
+				text: `Unknown request: ${request.method}`,
+			},
+		],
+		isError: true,
+	};
 });
 
 export async function startServer(): Promise<void> {

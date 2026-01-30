@@ -377,7 +377,7 @@ Use with OpenCode remote MCP configuration:
   "mcpServers": {
     "ai-factory": {
       "type": "remote",
-      "url": "http://your-server:3000",
+      "url": "http://your-server:4000",
       "auth": {
         "type": "bearer",
         "token": "secret-token"
