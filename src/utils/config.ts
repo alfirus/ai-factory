@@ -1,7 +1,8 @@
 import dotenv from "dotenv";
 
 // Load environment variables from .env file if it exists
-dotenv.config();
+// Use quiet: true to suppress dotenv logging messages that would break MCP protocol
+dotenv.config({ debug: false, quiet: true });
 
 export const config = {
 	GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',

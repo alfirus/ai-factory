@@ -140,7 +140,7 @@ server.setRequestHandler(toolsListSchema, async (request) => {
 	}
 
 	return { tools };
-});
+};);
 
 // Handler 2: tools/call
 server.setRequestHandler(toolsCallSchema, async (request) => {

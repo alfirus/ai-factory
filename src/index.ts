@@ -5,18 +5,18 @@ import { registerAllProviders } from "./providers/index.js";
 import { logger } from "./utils/logger.js";
 
 async function main() {
-  // Check if running in HTTP mode
-  const useHTTP = process.env.TRANSPORT === "http";
+	// Check if running in HTTP mode
+	const useHTTP = process.env.TRANSPORT === 'http';
 
-  if (useHTTP) {
-    // Start with HTTP transport
-    registerAllProviders();
-    await startHTTPServer(server);
-    logger.info("AI Factory running in HTTP mode");
-  } else {
-    // Default: start with stdio transport
-    await startServer();
-  }
+	if (useHTTP) {
+		// Start with HTTP transport
+		registerAllProviders();
+		await startHTTPServer(server);
+		logger.info('AI Factory running in HTTP mode');
+	} else {
+		// Default: start with stdio transport
+		await startServer();
+	}
 }
 
 main().catch((error) => {

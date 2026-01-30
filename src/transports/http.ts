@@ -3,6 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { config } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { usageTracker } from "../utils/usage-tracker.js";
+import { getAllProviders } from '../providers/index.js';
 
 export async function startHTTPServer(mcpServer: Server): Promise<void> {
   const app = express();
@@ -31,14 +32,13 @@ export async function startHTTPServer(mcpServer: Server): Promise<void> {
 
   // Provider status endpoint
   app.get("/providers", (req: Request, res: Response) => {
-    const response = mcpServer.requestHandler({
-      method: "resources/read",
-      params: {
-        uri: "providers://status",
-      },
-    } as any);
-
-    res.json(response);
+    const providers = getAllProviders().map((p) => ({
+					name: p.name,
+					configured: p.isAvailable(),
+					defaultModel: p.defaultModel,
+				}));
+    
+    res.json(providers);
   });
 
   // Usage quota JSON API
@@ -179,20 +179,6 @@ export async function startHTTPServer(mcpServer: Server): Promise<void> {
 </html>`);
   });
 
-  // MCP request handler endpoint
-  app.post("/mcp", async (req: Request, res: Response) => {
-    try {
-      const request = req.body;
-      const result = await mcpServer.requestHandler(request);
-      res.json(result);
-    } catch (error) {
-      logger.error("MCP request error", error);
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
   return new Promise((resolve) => {
     app.listen(port, () => {
       logger.info(`HTTP server listening on port ${port}`);
@@ -200,7 +186,6 @@ export async function startHTTPServer(mcpServer: Server): Promise<void> {
       logger.info(`Usage API: http://localhost:${port}/usage`);
       logger.info(`Health: http://localhost:${port}/health`);
       logger.info(`Providers: http://localhost:${port}/providers`);
-      logger.info(`MCP: POST http://localhost:${port}/mcp`);
       if (config.AUTH_TOKEN) {
         logger.info("Auth enabled: Bearer token required");
       }
